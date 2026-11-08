@@ -1,6 +1,6 @@
 {
   "name": "@afkzona/brightline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Website scanner that finds likely manipulative design (dark patterns) and maps each finding to the EU provision it may breach.",
   "license": "AGPL-3.0-only",
   "author": "MB AFKzona Group",

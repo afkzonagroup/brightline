@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-08
+
+### Fixed
+
+- Trailing-character trimming runs in linear time on hostile page text; amount parsing caps its input (#17).
+- CI and release jobs allow the Chromium sandbox on GitHub-hosted runners (#6).
+
+### Added
+
+- Action self-test on a GitHub-hosted runner (#19).
+
+### Changed
+
+- Dependabot groups minor and patch updates and ignores major versions (#16).
+- Release workflow skips versions already on npm.
+
 ## [0.1.0] - 2026-11-08
 
 ### Added
@@ -28,5 +44,6 @@ All notable changes to this project are documented here. The format follows
 - Playwright test helper (`@afkzona/brightline/playwright`), GitHub Action and
   Docker image.
 
-[Unreleased]: https://github.com/afkzonagroup/brightline/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/afkzonagroup/brightline/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/afkzonagroup/brightline/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/afkzonagroup/brightline/releases/tag/v0.1.0
