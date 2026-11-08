@@ -254,7 +254,7 @@ The JSON schemas in `schema/` document the formats; validation in code is hand-w
 
 ## Enterprise
 
-AFKzona Group offers, under a commercial licence and outside this repository: a hosted dashboard, continuous monitoring of many sites, SSO/SAML, roles, audit evidence packs, a legal-update feed, white-label reports, and SLA-backed support. See [COMMERCIAL.md](COMMERCIAL.md).
+MB AFKzona Group offers a commercial licence for organisations that cannot use the AGPL-3.0 terms (including white-label use without the attribution notice), integration into your systems, custom connectors and features, and support agreements. See [COMMERCIAL.md](COMMERCIAL.md) or contact info@afkzonagroup.lt.
 
 ## Contributing
 
