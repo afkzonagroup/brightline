@@ -18,7 +18,11 @@
  */
 
 import type { DraftFinding } from '../types.js';
-import { clip } from '../util/text.js';
+import { clip, trimTrailing } from '../util/text.js';
+
+const AMOUNT_SEPARATORS = new Set(['.', ',']);
+/** Amounts are short; capping the text keeps the number scan linear on hostile page text. */
+const MAX_AMOUNT_TEXT = 512;
 
 /** A checkpoint in a journey. */
 export interface TotalCheckpoint {
@@ -49,7 +53,8 @@ const CURRENCY_AFTER = /^(?:€|\$|£|eur|usd|gbp|chf|zł|pln|kč|czk|ft|huf|lei
  * parseAmount('Total: 1.234,56 €'); // 1234.56
  * ```
  */
-export function parseAmount(text: string): number | null {
+export function parseAmount(input: string): number | null {
+  const text = input.slice(0, MAX_AMOUNT_TEXT);
   const candidates = [...text.matchAll(/\d(?:[\d.,'\u00a0\u202f ]*\d)?/gu)];
   if (candidates.length === 0) return null;
   // Prefer the number written next to a currency sign or code; otherwise the last number.
@@ -61,7 +66,7 @@ export function parseAmount(text: string): number | null {
   const match = nextToCurrency ?? candidates[candidates.length - 1];
   if (match === undefined) return null;
   let raw = match[0].replace(/[\s\u00a0\u202f']/gu, '');
-  raw = raw.replace(/[.,]+$/u, '');
+  raw = trimTrailing(raw, AMOUNT_SEPARATORS);
   if (raw === '') return null;
   const lastSep = Math.max(raw.lastIndexOf('.'), raw.lastIndexOf(','));
   let normalised: string;
