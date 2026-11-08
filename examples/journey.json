@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/journey.schema.json",
+  "version": 1,
+  "name": "checkout",
+  "startUrl": "https://shop.example/shop/product.html",
+  "steps": [
+    { "action": "click", "selector": "#add" },
+    { "action": "mark", "name": "cart", "total": "#total" },
+    { "action": "goto", "url": "https://shop.example/shop/checkout.html" },
+    { "action": "mark", "name": "review", "total": "#total", "orderButton": "#place" }
+  ]
+}

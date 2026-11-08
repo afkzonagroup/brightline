@@ -1,0 +1,103 @@
+name: Brightline
+description: Scan a website for likely manipulative design and map findings to EU provisions (possible issues, not legal conclusions).
+author: MB AFKzona Group
+branding:
+  icon: search
+  color: blue
+inputs:
+  url:
+    description: Start URL (http or https).
+    required: true
+  journey:
+    description: Path to a JSON journey file in the repository.
+    required: false
+    default: ''
+  max-pages:
+    description: Pages to crawl (0 to 200).
+    required: false
+    default: '10'
+  max-duration:
+    description: Time budget in seconds (5 to 1800).
+    required: false
+    default: '180'
+  out:
+    description: Output directory for report.json, report.html and screenshots.
+    required: false
+    default: brightline-report
+  format:
+    description: json, html or both.
+    required: false
+    default: both
+  detectors:
+    description: Comma-separated detector ids (default all).
+    required: false
+    default: ''
+  fail-on:
+    description: Fail the step if a finding is at least high, medium or low. none never fails.
+    required: false
+    default: none
+  allow-addresses:
+    description: Private IP addresses that may be scanned (for a service started in the job), comma-separated.
+    required: false
+    default: ''
+  ignore-robots:
+    description: Set to true to ignore robots.txt.
+    required: false
+    default: 'false'
+outputs:
+  findings:
+    description: Number of findings.
+    value: ${{ steps.scan.outputs.findings }}
+  high:
+    description: Number of high-confidence findings.
+    value: ${{ steps.scan.outputs.high }}
+  medium:
+    description: Number of medium-confidence findings.
+    value: ${{ steps.scan.outputs.medium }}
+  low:
+    description: Number of low-confidence findings.
+    value: ${{ steps.scan.outputs.low }}
+  report-dir:
+    description: Directory with the reports.
+    value: ${{ steps.scan.outputs.report-dir }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '22'
+    - name: Install and build Brightline
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci --ignore-scripts --no-audit --no-fund
+        npm run build
+        npx --no-install playwright-core install --with-deps --only-shell chromium
+    - name: Allow Chromium's sandbox on GitHub-hosted Ubuntu
+      # Ubuntu 23.10 and later restrict unprivileged user namespaces through
+      # AppArmor, which Chromium's sandbox needs. Only the throwaway
+      # GitHub-hosted VM is changed; on self-hosted runners nothing is changed
+      # and the scan fails with a clear message if the sandbox cannot start.
+      if: runner.os == 'Linux' && runner.environment == 'github-hosted'
+      shell: bash
+      run: |
+        if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
+    - name: Scan
+      id: scan
+      shell: bash
+      # Inputs are passed as environment variables, never interpolated into the script.
+      env:
+        BRIGHTLINE_URL: ${{ inputs.url }}
+        BRIGHTLINE_JOURNEY: ${{ inputs.journey }}
+        BRIGHTLINE_MAX_PAGES: ${{ inputs.max-pages }}
+        BRIGHTLINE_MAX_DURATION: ${{ inputs.max-duration }}
+        BRIGHTLINE_OUT: ${{ inputs.out }}
+        BRIGHTLINE_FORMAT: ${{ inputs.format }}
+        BRIGHTLINE_DETECTORS: ${{ inputs.detectors }}
+        BRIGHTLINE_FAIL_ON: ${{ inputs.fail-on }}
+        BRIGHTLINE_ALLOW_ADDRESSES: ${{ inputs.allow-addresses }}
+        BRIGHTLINE_IGNORE_ROBOTS: ${{ inputs.ignore-robots }}
+      run: node "$GITHUB_ACTION_PATH/dist/action/entrypoint.js"

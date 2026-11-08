@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/afkzonagroup/brightline/schema/journey.schema.json",
+  "title": "Brightline journey",
+  "description": "Declarative user journey. Validated strictly by validateJourney(); this schema documents the same rules for editors (selector-engine and control-character checks are enforced only by the validator).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "name",
+    "startUrl",
+    "steps"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[\\p{L}\\p{N} ._()-]+$"
+    },
+    "startUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https?://"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "url"
+            ],
+            "properties": {
+              "action": {
+                "const": "goto"
+              },
+              "url": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^https?://"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "selector"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "click",
+                  "check",
+                  "uncheck",
+                  "waitFor"
+                ]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "selector",
+              "value"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "fill",
+                  "select"
+                ]
+              },
+              "selector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "name"
+            ],
+            "properties": {
+              "action": {
+                "const": "mark"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "total": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "orderButton": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "expectTotalChange": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+# Commercial licence
+
+Brightline is dual-licensed.
+
+## Open source: AGPL-3.0-only
+
+Anyone may use, study, change and share Brightline under the GNU Affero
+General Public License version 3, with the attribution term in
+LICENSE-ADDITIONAL-TERMS.md. In plain words:
+
+- You can use it for free, including commercially.
+- If you change it and let other people use it, including over a network
+  (for example as a hosted service), you must offer them the source code of
+  your changed version under the same licence.
+- HTML reports and user interfaces keep the notice "Brightline by AFKzona
+  Group" with its link.
+
+## Commercial licence
+
+Some organisations cannot accept the AGPL obligations, or want more. MB
+AFKzona Group offers a commercial licence that adds:
+
+- **No AGPL obligations.** Use and modify Brightline inside your own products
+  and services without publishing your source code.
+- **White-label reports.** Remove the attribution notice from reports and
+  interfaces.
+- **Warranty and indemnity options.**
+- **Priority support** with agreed response times.
+- **Enterprise features** (not part of this repository): hosted dashboard,
+  continuous multi-site monitoring, SSO/SAML, roles and permissions, audit
+  evidence packs, a legal-update feed, and SLA-backed support.
+
+## Contact
+
+Email info@afkzonagroup.lt with your organisation name, how you plan to use
+Brightline, and roughly how many sites you scan.
+
+This file explains the licensing model; it is not itself a licence. The
+commercial licence is a separate written agreement.

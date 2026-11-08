@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Hostile DOM</title></head>
+<body><p>Only 1 left in stock</p>
+<script>
+  // Tamper with globals the collector uses.
+  Array.from = function () { throw new Error('tampered'); };
+</script>
+</body></html>

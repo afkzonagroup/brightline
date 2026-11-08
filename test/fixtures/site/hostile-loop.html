@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Hostile loop</title></head>
+<body><p>Only 1 left in stock</p>
+<script>
+  // Hang any code that uses Array.from, including injected collectors.
+  Array.from = function () { for (;;) {} };
+</script>
+</body></html>

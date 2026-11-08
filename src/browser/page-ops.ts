@@ -1,0 +1,159 @@
+// Copyright 2026 MB AFKzona Group
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import type { Page } from 'playwright-core';
+import { CONSENT_SOURCE, DIALOG_HINT_SOURCE, MONEY_SOURCE, TIMER_SOURCE } from '../data/phrases.js';
+import { parseTimerSeconds } from '../detectors/countdown.js';
+import { safeWriteFile } from '../util/files.js';
+import { collectSnapshot, collectTimerTexts, type CollectArgs } from './page-scripts.js';
+import { isPlainCssSelector, sanitizeLinks, sanitizeSnapshot, sanitizeTimerTexts } from './sanitize.js';
+import type { PageSnapshot, TimerReading } from './snapshot.js';
+
+/** Longest time any in-page evaluation may take. A page that blocks its main thread fails instead of hanging the scan. */
+export const EVALUATE_TIMEOUT_MS = 15_000;
+
+/**
+ * Run an in-page evaluation with a deadline. On timeout the page is closed,
+ * which also ends the pending evaluation.
+ */
+export async function withDeadline<T>(page: Page, work: Promise<T>, ms: number = EVALUATE_TIMEOUT_MS): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      void page.close().catch(() => undefined);
+      reject(new Error(`Page evaluation exceeded ${String(ms)} ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Caps for the in-page collector. */
+export const COLLECT_ARGS: CollectArgs = Object.freeze({
+  moneySource: MONEY_SOURCE,
+  consentSource: CONSENT_SOURCE,
+  dialogHintSource: DIALOG_HINT_SOURCE,
+  maxClickables: 800,
+  maxToggles: 300,
+  maxTextBlocks: 3000,
+  maxPriceSignals: 300,
+  maxElements: 20_000,
+});
+
+/** Collect a snapshot of the current page state. */
+export async function snapshotPage(page: Page): Promise<PageSnapshot> {
+  // Page scripts share the JavaScript world with the collector and may tamper
+  // with its result, so the result is treated as untrusted and re-validated.
+  return sanitizeSnapshot(await withDeadline(page, page.evaluate(collectSnapshot, COLLECT_ARGS)), COLLECT_ARGS);
+}
+
+/** Read countdown-like texts and parse them. */
+export async function readTimers(page: Page): Promise<TimerReading[]> {
+  const raw = sanitizeTimerTexts(
+    await withDeadline(page, page.evaluate(collectTimerTexts, { timerSource: TIMER_SOURCE, max: 20, maxElements: COLLECT_ARGS.maxElements })),
+    20,
+  );
+  const out: TimerReading[] = [];
+  for (const r of raw) {
+    const seconds = parseTimerSeconds(r.text);
+    if (seconds !== null) out.push({ selector: r.selector, text: r.text, seconds });
+  }
+  return out;
+}
+
+/** Same-origin http(s) links on the page (capped). */
+export async function collectLinks(page: Page, max = 500): Promise<string[]> {
+  const raw = await withDeadline(
+    page,
+    page.evaluate((limit: number) => {
+      const out: string[] = [];
+      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+        if (out.length >= limit) break;
+        const href = (a as HTMLAnchorElement).href;
+        if (href.startsWith('http:') || href.startsWith('https:')) out.push(href);
+      }
+      return out;
+    }, max),
+  );
+  return sanitizeLinks(raw, max);
+}
+
+/** Visible label of an element: value for inputs, else text, else aria-label. */
+export async function labelOfSelector(page: Page, selector: string): Promise<{ found: boolean; label: string }> {
+  const locator = page.locator(selector).first();
+  const count = await page.locator(selector).count().catch(() => 0);
+  if (count === 0) return { found: false, label: '' };
+  const visible = await locator.isVisible().catch(() => false);
+  if (!visible) return { found: false, label: '' };
+  const label: unknown = await locator
+    .evaluate((el: Element) => {
+      const norm = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
+      if (el instanceof HTMLInputElement) return norm(el.value) || norm(el.getAttribute('aria-label'));
+      return norm((el as HTMLElement).innerText) || norm(el.getAttribute('aria-label')) || norm(el.getAttribute('title'));
+    }, undefined, { timeout: 5000 })
+    .catch(() => '');
+  return { found: true, label: typeof label === 'string' ? label.slice(0, 300) : '' };
+}
+
+/** Text of the first element matching the selector (capped), or null. */
+export async function textOfSelector(page: Page, selector: string): Promise<string | null> {
+  const locator = page.locator(selector).first();
+  if ((await page.locator(selector).count().catch(() => 0)) === 0) return null;
+  const text = await locator.innerText({ timeout: 3000 }).catch(() => null);
+  return text === null ? null : text.replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
+/** Screenshot limits. */
+export const SCREENSHOT_LIMITS = Object.freeze({ maxWidth: 1200, maxHeight: 800, padding: 4, quality: 70 });
+
+/**
+ * Save a cropped JPEG screenshot of an element. Returns false when the element
+ * has no box. The file name is generated by the caller and validated.
+ */
+export async function screenshotElement(page: Page, selector: string, dir: string, fileName: string): Promise<boolean> {
+  // Evidence selectors come from the page; only plain CSS selectors are used.
+  if (!isPlainCssSelector(selector)) return false;
+  const locator = page.locator(selector).first();
+  await locator.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => undefined);
+  // Small toggles (a checkbox) are shown with their label or parent for context.
+  const box = await locator
+    .evaluate((el: Element) => {
+      let own = el.getBoundingClientRect();
+      // For text, crop to the text itself rather than the full-width block.
+      const control = el instanceof HTMLInputElement || el instanceof HTMLButtonElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement;
+      if (!control && el.textContent.trim() !== '') {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const text = range.getBoundingClientRect();
+        if (text.width > 0 && text.height > 0) own = text;
+      }
+      const toggle = el instanceof HTMLInputElement || el.getAttribute('role') === 'switch' || el.getAttribute('role') === 'checkbox';
+      if (!toggle || own.width * own.height >= 2000) return { x: own.x, y: own.y, width: own.width, height: own.height };
+      const context = el.closest('label') ?? (el.id !== '' ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null) ?? el.parentElement;
+      const rects = [own, ...(context === null ? [] : [context.getBoundingClientRect()])].filter((r) => r.width > 0 && r.height > 0);
+      if (rects.length === 0) return null;
+      const x = Math.min(...rects.map((r) => r.x));
+      const y = Math.min(...rects.map((r) => r.y));
+      const right = Math.max(...rects.map((r) => r.x + r.width));
+      const bottom = Math.max(...rects.map((r) => r.y + r.height));
+      return { x, y, width: right - x, height: bottom - y };
+    }, undefined, { timeout: 2000 })
+    .catch(() => null);
+  if (box === null || box.width < 1 || box.height < 1) return false;
+  const vp = page.viewportSize() ?? { width: 1280, height: 800 };
+  const L = SCREENSHOT_LIMITS;
+  // Viewport coordinates, clamped to the viewport and to the size caps.
+  const x = Math.max(0, box.x - L.padding);
+  const y = Math.max(0, box.y - L.padding);
+  const width = Math.min(box.x + box.width + L.padding, vp.width) - x;
+  const height = Math.min(box.y + box.height + L.padding, vp.height) - y;
+  if (width < 1 || height < 1) return false;
+  const clip = { x, y, width: Math.min(width, L.maxWidth), height: Math.min(height, L.maxHeight) };
+  const buffer = await page.screenshot({ clip, type: 'jpeg', quality: L.quality, animations: 'disabled', timeout: 5000 }).catch(() => null);
+  if (buffer === null) return false;
+  await safeWriteFile(dir, fileName, buffer);
+  return true;
+}

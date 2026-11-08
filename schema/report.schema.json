@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/afkzonagroup/brightline/schema/report.schema.json",
+  "title": "Brightline report",
+  "description": "Report format 1.x. Findings are possible issues, not legal conclusions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "tool",
+    "startedAt",
+    "finishedAt",
+    "startUrl",
+    "pages",
+    "findings",
+    "summary",
+    "provisions",
+    "blockedRequests",
+    "limits",
+    "notes",
+    "disclaimer"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "brightline"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "startedAt": {
+      "type": "string"
+    },
+    "finishedAt": {
+      "type": "string"
+    },
+    "startUrl": {
+      "type": "string"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "url",
+          "status"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "scanned",
+              "skipped-robots",
+              "not-html",
+              "error"
+            ]
+          },
+          "httpStatus": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "journey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "completed",
+        "stepsRun",
+        "marks"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "stepsRun": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "detector",
+          "title",
+          "confidence",
+          "provisions",
+          "explanation",
+          "pageUrl",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F\\d{4,6}$"
+          },
+          "detector": {
+            "enum": [
+              "countdown-reset",
+              "preselected-option",
+              "confirmshaming",
+              "asymmetric-choice",
+              "claim-to-verify",
+              "price-reduction-prior-price",
+              "order-button-label",
+              "hidden-costs"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "provisions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "enum": [
+                "ucpd-art-5",
+                "ucpd-art-6-1",
+                "ucpd-art-7",
+                "ucpd-art-8-9",
+                "ucpd-annex-i-7",
+                "ucpd-annex-i-18",
+                "crd-art-6-1-e",
+                "crd-art-8-2-sub1",
+                "crd-art-8-2-sub2",
+                "crd-art-22",
+                "pid-art-6a",
+                "dsa-art-25",
+                "gdpr-art-4-11",
+                "gdpr-art-7"
+              ]
+            }
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "pageUrl": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "selector",
+              "text",
+              "details"
+            ],
+            "properties": {
+              "selector": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "screenshot": {
+                "type": "string",
+                "pattern": "^screenshots/F\\d{4,6}\\.jpg$"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "high",
+        "medium",
+        "low",
+        "byDetector"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "byDetector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "provisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "citation",
+          "instrument",
+          "url",
+          "summary",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "ucpd-art-5",
+              "ucpd-art-6-1",
+              "ucpd-art-7",
+              "ucpd-art-8-9",
+              "ucpd-annex-i-7",
+              "ucpd-annex-i-18",
+              "crd-art-6-1-e",
+              "crd-art-8-2-sub1",
+              "crd-art-8-2-sub2",
+              "crd-art-22",
+              "pid-art-6a",
+              "dsa-art-25",
+              "gdpr-art-4-11",
+              "gdpr-art-7"
+            ]
+          },
+          "citation": {
+            "type": "string"
+          },
+          "instrument": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://eur-lex\\.europa\\.eu/"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "blockedRequests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "url",
+          "reason",
+          "stage"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "route",
+              "proxy"
+            ]
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxPages",
+        "maxDurationMs",
+        "navigationTimeoutMs",
+        "maxResponseBytes",
+        "maxTotalBytes",
+        "maxRedirects",
+        "respectRobotsTxt"
+      ],
+      "properties": {
+        "maxPages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxDurationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "navigationTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxTotalBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxRedirects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "respectRobotsTxt": {
+          "type": "boolean"
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "disclaimer": {
+      "type": "string"
+    }
+  }
+}
