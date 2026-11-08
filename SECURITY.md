@@ -58,6 +58,7 @@ disclosure date with you. Supported version: the latest 0.x release.
 | Script injection into the HTML report | All values escaped; only http(s) links; no scripts; CSP `default-src 'none'` with a hashed style; screenshots read only from `screenshots/F0000.jpg` paths inside the report directory, real-path checked, JPEG magic bytes, size caps | `src/report/html.ts` | `test/unit/report.test.ts`, `test/integration/scan.test.ts` |
 | Overwriting files via symlinks or path traversal | Fixed file names, validated; `O_NOFOLLOW`; a symlinked `screenshots` directory is refused; directories 0700, files 0600 | `src/util/files.ts` | `test/unit/misc.test.ts`, `test/unit/report.test.ts` |
 | Hostile page tampering with the in-page collector (patched built-ins, wrong types, huge values, endless loops) | Every result from the page is re-validated and capped in Node; evaluations have a 15 s deadline after which the page is closed; page-supplied selectors are used only if they are plain CSS | `src/browser/sanitize.ts`, `src/browser/page-ops.ts` | `test/unit/sanitize.test.ts`, `test/integration/scan.test.ts` ("hostile pages") |
+| Hostile page exhausting the collector with shadow DOM (very deep nesting, very many shadow roots) | The walk over open shadow roots is iterative (an explicit stack, no recursion) and bounded: 100 000 elements, 2 000 shadow roots, 32 levels; ancestor walks, rendered-text reads and the wait after a click have their own caps; the snapshot is marked truncated | `src/browser/page-scripts.ts`, `src/browser/page-ops.ts` | `test/integration/shadow-spa.test.ts` ("hostile shadow DOM") |
 | Pop-up floods and report flooding | Pop-ups closed at once, at most 3 pages per context, every leftover page closed after each crawled page; at most 50 findings per page, 1000 per scan, 200 screenshots | `src/browser/session.ts`, `src/scan.ts` | `test/integration/scan.test.ts` |
 | Terminal escape sequences from page content in CLI output | Control, C1 and bidi characters replaced in every printed line | `src/cli/main.ts` | `test/unit/cli.test.ts` |
 | Browser exploit from a hostile page | Chromium's OS sandbox is on by default and is never turned off silently: if it cannot start, the scan stops with an explanation. Opt-out only by `--no-sandbox` / `BRIGHTLINE_NO_SANDBOX=1`, meant for containers. In Docker the container is the boundary: non-root user, run with `--cap-drop=ALL --security-opt no-new-privileges --read-only`. The Action keeps the sandbox on and allows unprivileged user namespaces only on GitHub-hosted Linux runners | `src/browser/session.ts`, `src/scan.ts`, `Dockerfile`, `action.yml` | `test/unit/misc.test.ts` (launch errors), `test/unit/cli.test.ts` (action.yml) |
@@ -72,6 +73,15 @@ disclosure date with you. Supported version: the latest 0.x release.
 - `--allow-address` and `allowAddresses` deliberately open a private address. A bare address opens every port on it, so a scanned page (or a third-party script it loads) can reach any service there. Give the port as well (`10.0.0.5:8080`, `[fd00::5]:8080`) to open only the service you are scanning. Use them only for your own servers. An IPv6 address with a port needs brackets: without them every colon belongs to the address, so the entry names a different address and allows nothing you meant.
 - A countdown that is not about an offer (for example a video's remaining time) and restarts on reload is reported with high confidence; the reviewer has to look at what the timer shows.
 - Site cookies set during a scan live in that scan's browser context and are sent back to the same site, as a normal browser would. Do not run journeys with real accounts.
+
+### Coverage limits
+
+These are limits of what Brightline reads, not security controls:
+
+- **Closed shadow roots** are not read; page script cannot reach them.
+- **Frames** are not read. Brightline never crosses into a cross-origin frame; requests a frame makes still pass the network guard.
+
+Reading open shadow roots and following client-side routes did not change the threat model above: the assets, actors and trust boundaries are the same. A client-side route is pushed only for a same-origin URL that the crawl accepted (the browser refuses any other origin), robots.txt and the page and time budgets apply to it as to any page, and every request the page makes for it passes the route check and the guard proxy.
 
 ## Data flows
 

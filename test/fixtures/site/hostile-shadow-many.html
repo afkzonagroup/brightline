@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Many shadow roots</title></head>
+<body>
+<label><input type="checkbox" checked> Add travel insurance (+€9.99)</label>
+<div id="cards"></div>
+<div id="filler"></div>
+<script>
+  function extra(text) {
+    var label = document.createElement('label');
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = true;
+    label.append(box, text);
+    return label;
+  }
+  // 30 000 hosts, each with its own shadow root. The last one holds a pre-ticked
+  // extra, beyond the shadow-root budget.
+  var cards = document.getElementById('cards');
+  for (var i = 0; i < 30000; i += 1) {
+    var host = document.createElement('tiny-card');
+    var root = host.attachShadow({ mode: 'open' });
+    var p = document.createElement('p');
+    p.textContent = 'Card ' + i;
+    root.append(p);
+    if (i === 29999) root.append(extra(' Add protection plan (+€14.99)'));
+    cards.append(host);
+  }
+  // 80 000 more elements, then a pre-ticked extra beyond the node budget.
+  var filler = document.getElementById('filler');
+  for (var j = 0; j < 80000; j += 1) filler.append(document.createElement('i'));
+  filler.append(extra(' Add priority boarding (+€5.00)'));
+</script>
+</body></html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Nested shadow roots</title></head>
+<body>
+<h1>Boots</h1>
+<!-- Three levels of declarative open shadow roots. -->
+<product-page>
+  <template shadowrootmode="open">
+    <section>
+      <product-card>
+        <template shadowrootmode="open">
+          <div class="card">
+            <h2>Hiking boots</h2>
+            <p class="stock">Only 2 left in stock</p>
+            <buy-box>
+              <template shadowrootmode="open">
+                <div class="prices"><s>€120.00</s> <span class="price">€89.00</span></div>
+                <label><input type="checkbox" checked> Add protection plan (+€14.99)</label>
+              </template>
+            </buy-box>
+          </div>
+        </template>
+      </product-card>
+    </section>
+  </template>
+</product-page>
+</body></html>

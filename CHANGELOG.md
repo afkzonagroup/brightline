@@ -12,6 +12,30 @@ All notable changes to this project are documented here. The format follows
   `[fd00::5]:8080` opens only that port on a private address. A bare address
   still opens every port. `scan()` now rejects invalid `allowAddresses`
   entries and more than 20 of them before any network activity.
+- Open shadow roots are read: dialogs, buttons, links, checkboxes, text,
+  prices and countdowns inside web components, nested shadow roots and
+  slotted content are collected, and checkbox labels are found across the
+  shadow boundary. The walk is iterative and bounded (100 000 elements, 2 000
+  shadow roots, 32 levels). Evidence selectors for such elements are plain CSS
+  paths through the host that Playwright resolves to the same element.
+- Client-side navigation: hash routes (`#/checkout`) are crawled as pages of
+  their own; a same-origin link that returns HTTP 404 on a direct load is
+  opened by pushing it onto the history of the page that links to it, and
+  scanned if the app renders it. Links inside open shadow roots are followed.
+- Journeys: after a click, Brightline waits for requests in flight and for
+  the DOM (including open shadow roots) to settle, at most 2.5 seconds; a
+  click that changes the route inside the page scans the new route.
+- Closed shadow roots and frames are documented as coverage limits.
+
+### Changed
+
+- Within one journey the same finding (detector, element, text and page) is
+  listed once.
+- Buttons, links and checkboxes are read within the first 100 000 elements
+  of a page (light DOM and open shadow roots together); before, the light DOM
+  was read without that bound.
+- The order button label and the total of a journey mark are read as
+  rendered, including slotted text in shadow roots.
 
 ## [0.1.1] - 2026-11-08
 

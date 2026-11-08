@@ -1,11 +1,11 @@
 // Copyright 2026 MB AFKzona Group
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { Page } from 'playwright-core';
+import type { Page, Request } from 'playwright-core';
 import { CONSENT_SOURCE, DIALOG_HINT_SOURCE, MONEY_SOURCE, TIMER_SOURCE } from '../data/phrases.js';
 import { parseTimerSeconds } from '../detectors/countdown.js';
 import { safeWriteFile } from '../util/files.js';
-import { collectSnapshot, collectTimerTexts, type CollectArgs } from './page-scripts.js';
+import { elementText, pageTask, waitForQuietDom, type CollectArgs, type PageTask, type WalkLimits } from './page-scripts.js';
 import { isPlainCssSelector, sanitizeLinks, sanitizeSnapshot, sanitizeTimerTexts } from './sanitize.js';
 import type { PageSnapshot, TimerReading } from './snapshot.js';
 
@@ -31,8 +31,21 @@ export async function withDeadline<T>(page: Page, work: Promise<T>, ms: number =
   }
 }
 
+/**
+ * Bounds of the deep walk over the document and its open shadow roots. The
+ * walk is iterative, so neither deep nesting nor many roots can exhaust the
+ * stack; whatever lies beyond these bounds is not read and the snapshot is
+ * marked truncated.
+ */
+export const WALK_LIMITS: WalkLimits = Object.freeze({
+  maxNodes: 100_000,
+  maxShadowRoots: 2_000,
+  maxShadowDepth: 32,
+});
+
 /** Caps for the in-page collector. */
 export const COLLECT_ARGS: CollectArgs = Object.freeze({
+  ...WALK_LIMITS,
   moneySource: MONEY_SOURCE,
   consentSource: CONSENT_SOURCE,
   dialogHintSource: DIALOG_HINT_SOURCE,
@@ -43,19 +56,19 @@ export const COLLECT_ARGS: CollectArgs = Object.freeze({
   maxElements: 20_000,
 });
 
-/** Collect a snapshot of the current page state. */
+const task = (t: PageTask): PageTask => t;
+
+/** Collect a snapshot of the current page state, including open shadow roots. */
 export async function snapshotPage(page: Page): Promise<PageSnapshot> {
   // Page scripts share the JavaScript world with the collector and may tamper
   // with its result, so the result is treated as untrusted and re-validated.
-  return sanitizeSnapshot(await withDeadline(page, page.evaluate(collectSnapshot, COLLECT_ARGS)), COLLECT_ARGS);
+  return sanitizeSnapshot(await withDeadline(page, page.evaluate(pageTask, task({ kind: 'snapshot', args: COLLECT_ARGS }))), COLLECT_ARGS);
 }
 
 /** Read countdown-like texts and parse them. */
 export async function readTimers(page: Page): Promise<TimerReading[]> {
-  const raw = sanitizeTimerTexts(
-    await withDeadline(page, page.evaluate(collectTimerTexts, { timerSource: TIMER_SOURCE, max: 20, maxElements: COLLECT_ARGS.maxElements })),
-    20,
-  );
+  const args = { ...WALK_LIMITS, timerSource: TIMER_SOURCE, max: 20, maxElements: COLLECT_ARGS.maxElements };
+  const raw = sanitizeTimerTexts(await withDeadline(page, page.evaluate(pageTask, task({ kind: 'timers', args }))), 20);
   const out: TimerReading[] = [];
   for (const r of raw) {
     const seconds = parseTimerSeconds(r.text);
@@ -64,46 +77,111 @@ export async function readTimers(page: Page): Promise<TimerReading[]> {
   return out;
 }
 
-/** Same-origin http(s) links on the page (capped). */
+/** Links on the page, including those inside open shadow roots: http(s) only, capped. */
 export async function collectLinks(page: Page, max = 500): Promise<string[]> {
-  const raw = await withDeadline(
-    page,
-    page.evaluate((limit: number) => {
-      const out: string[] = [];
-      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
-        if (out.length >= limit) break;
-        const href = (a as HTMLAnchorElement).href;
-        if (href.startsWith('http:') || href.startsWith('https:')) out.push(href);
-      }
-      return out;
-    }, max),
-  );
+  const raw = await withDeadline(page, page.evaluate(pageTask, task({ kind: 'links', args: { ...WALK_LIMITS, max } })));
   return sanitizeLinks(raw, max);
 }
 
-/** Visible label of an element: value for inputs, else text, else aria-label. */
+/** Limits for {@link settleAfter}: quiet period and longest wait, in ms. */
+export const QUIET_LIMITS = Object.freeze({ quietMs: 300, maxMs: 2500 });
+
+/** Outcome of {@link settleAfter}. */
+export interface SettleResult {
+  /** Elements were added, removed or moved by or after the action (text-only updates do not count). */
+  readonly changed: boolean;
+  /** The main frame started loading a new document (a real navigation, not a client-side route change). */
+  readonly loaded: boolean;
+}
+
+/**
+ * Run `action` (a click, a client-side route change), then wait until the page
+ * has no requests in flight and its DOM, including open shadow roots, has not
+ * changed for {@link QUIET_LIMITS}.quietMs, or until maxMs has passed. Content
+ * an app renders after fetching data is therefore present before the next
+ * step reads the page. Requests are only observed here; they still pass the
+ * network guard. A page that navigates away ends the wait early.
+ */
+export async function settleAfter(page: Page, action: () => Promise<unknown>): Promise<SettleResult> {
+  const inflight = new Set<Request>();
+  let lastNetwork = 0;
+  // Set from the event handler; an object so that the compiler does not narrow it to false.
+  const state = { loaded: false };
+  const onRequest = (request: Request): void => {
+    inflight.add(request);
+    lastNetwork = Date.now();
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) state.loaded = true;
+  };
+  const onDone = (request: Request): void => {
+    inflight.delete(request);
+    lastNetwork = Date.now();
+  };
+  const structure = async (): Promise<unknown> =>
+    await withDeadline(page, page.evaluate(pageTask, task({ kind: 'structure', args: WALK_LIMITS }))).catch(() => null);
+  const before = await structure();
+  page.on('request', onRequest);
+  page.on('requestfinished', onDone);
+  page.on('requestfailed', onDone);
+  try {
+    await action();
+    const deadline = Date.now() + QUIET_LIMITS.maxMs;
+    let changed = false;
+    while (Date.now() < deadline && !page.isClosed()) {
+      const maxMs = Math.max(QUIET_LIMITS.quietMs, deadline - Date.now());
+      const result: unknown = await withDeadline(page, page.evaluate(waitForQuietDom, { ...WALK_LIMITS, quietMs: QUIET_LIMITS.quietMs, maxMs }), maxMs + 5000).catch(() => null);
+      if (typeof result !== 'object' || result === null) break;
+      if ((result as { changed?: unknown }).changed === true) changed = true;
+      if (inflight.size === 0 && Date.now() - lastNetwork >= QUIET_LIMITS.quietMs) break;
+      while (inflight.size > 0 && Date.now() < deadline && !page.isClosed()) await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
+    // Changes made by the action itself happen before the observer is in place,
+    // so the structure before and after is compared as well.
+    if (!changed && !state.loaded && !page.isClosed()) {
+      const after = await structure();
+      changed = typeof before === 'string' && typeof after === 'string' && before !== after;
+    }
+    return { changed, loaded: state.loaded };
+  } finally {
+    page.off('request', onRequest);
+    page.off('requestfinished', onDone);
+    page.off('requestfailed', onDone);
+  }
+}
+
+/**
+ * Client-side navigation: push `url` onto the page's history and announce it
+ * with a popstate event, as the browser does on Back and Forward. Routers that
+ * follow the history API render the route without loading a document. The
+ * caller checks the result; nothing is fetched by this call itself, and the
+ * browser refuses a URL from another origin.
+ */
+export async function pushClientRoute(page: Page, url: string): Promise<void> {
+  await withDeadline(
+    page,
+    page.evaluate((target: string) => {
+      history.pushState(null, '', target);
+      window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    }, url),
+  );
+}
+
+/** Visible label of an element: value for inputs, else text, else aria-label or title. Reads open shadow roots and slots. */
 export async function labelOfSelector(page: Page, selector: string): Promise<{ found: boolean; label: string }> {
   const locator = page.locator(selector).first();
   const count = await page.locator(selector).count().catch(() => 0);
   if (count === 0) return { found: false, label: '' };
   const visible = await locator.isVisible().catch(() => false);
   if (!visible) return { found: false, label: '' };
-  const label: unknown = await locator
-    .evaluate((el: Element) => {
-      const norm = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
-      if (el instanceof HTMLInputElement) return norm(el.value) || norm(el.getAttribute('aria-label'));
-      return norm((el as HTMLElement).innerText) || norm(el.getAttribute('aria-label')) || norm(el.getAttribute('title'));
-    }, undefined, { timeout: 5000 })
-    .catch(() => '');
+  const label: unknown = await locator.evaluate(elementText, 'label', { timeout: 5000 }).catch(() => '');
   return { found: true, label: typeof label === 'string' ? label.slice(0, 300) : '' };
 }
 
-/** Text of the first element matching the selector (capped), or null. */
+/** Text of the first element matching the selector (capped), or null. Reads open shadow roots and slots. */
 export async function textOfSelector(page: Page, selector: string): Promise<string | null> {
   const locator = page.locator(selector).first();
   if ((await page.locator(selector).count().catch(() => 0)) === 0) return null;
-  const text = await locator.innerText({ timeout: 3000 }).catch(() => null);
-  return text === null ? null : text.replace(/\s+/g, ' ').trim().slice(0, 300);
+  const text: unknown = await locator.evaluate(elementText, 'text', { timeout: 3000 }).catch(() => null);
+  return typeof text === 'string' ? text.slice(0, 300) : null;
 }
 
 /** Screenshot limits. */
@@ -132,7 +210,9 @@ export async function screenshotElement(page: Page, selector: string, dir: strin
       }
       const toggle = el instanceof HTMLInputElement || el.getAttribute('role') === 'switch' || el.getAttribute('role') === 'checkbox';
       if (!toggle || own.width * own.height >= 2000) return { x: own.x, y: own.y, width: own.width, height: own.height };
-      const context = el.closest('label') ?? (el.id !== '' ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null) ?? el.parentElement;
+      const root = el.getRootNode();
+      const scope: Document | ShadowRoot = root.nodeType === 11 ? (root as ShadowRoot) : document;
+      const context = el.closest('label') ?? (el.id !== '' ? scope.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null) ?? el.parentElement;
       const rects = [own, ...(context === null ? [] : [context.getBoundingClientRect()])].filter((r) => r.width > 0 && r.height > 0);
       if (rects.length === 0) return null;
       const x = Math.min(...rects.map((r) => r.x));

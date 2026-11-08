@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Deep shadow nesting</title></head>
+<body>
+<div id="root"></div>
+<script>
+  // 5000 shadow roots, each inside the previous one. A pre-ticked extra sits at
+  // depth 10 (within the walk limit) and another at the bottom (beyond it).
+  var parent = document.getElementById('root');
+  for (var depth = 1; depth <= 5000; depth += 1) {
+    var host = document.createElement('deep-node');
+    parent.append(host);
+    var root = host.attachShadow({ mode: 'open' });
+    if (depth === 10 || depth === 5000) {
+      var label = document.createElement('label');
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = true;
+      label.append(box, depth === 10 ? ' Add travel insurance (+€9.99)' : ' Add protection plan (+€14.99)');
+      root.append(label);
+    }
+    parent = root;
+  }
+</script>
+</body></html>

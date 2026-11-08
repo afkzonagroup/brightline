@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Slotted content</title></head>
+<body>
+<h1>Your booking</h1>
+<!-- The checkbox is in the shadow root; its label text is slotted light DOM. -->
+<check-row>Add travel insurance (+€9.99)</check-row>
+<!-- The checkbox is in the shadow root; the label wraps the host in the light DOM. -->
+<label>Send me the newsletter with special offers <check-box></check-box></label>
+<!-- The checkbox is in the shadow root; the label points at the host by id. -->
+<label for="prio">Priority boarding (+€6.00)</label> <check-box id="prio"></check-box>
+<!-- A dialog whose buttons get their text from slots. -->
+<offer-dialog>
+  <span slot="title">Join our club and save</span>
+  <span slot="yes">Yes, give me 10% off</span>
+  <span slot="no">No thanks, I prefer to pay full price</span>
+</offer-dialog>
+<!-- The same id in the document and in a shadow root: neither may be addressed by it. -->
+<p id="dup">Only 4 left in stock</p>
+<sale-note></sale-note>
+<!-- Light-DOM children of a host compete with its shadow children for selectors. -->
+<twin-host><p>Light twin</p></twin-host>
+<!-- A light child identical to the shadow child in every respect: no selector can tell them apart. -->
+<twin-exact><p>Only 1 left in stock</p></twin-exact>
+<script>
+  function h(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    (children || []).forEach(function (c) { node.append(c); });
+    return node;
+  }
+  function define(name, build) {
+    customElements.define(name, class extends HTMLElement {
+      connectedCallback() { if (!this.shadowRoot) build(this.attachShadow({ mode: 'open' }), this); }
+    });
+  }
+  define('check-row', function (root) {
+    root.append(h('label', {}, [h('input', { type: 'checkbox', checked: '' }), h('span', {}, [h('slot')])]));
+  });
+  define('check-box', function (root) {
+    root.append(h('input', { type: 'checkbox', checked: '' }));
+  });
+  define('offer-dialog', function (root) {
+    root.append(h('style', {}, ['.d{width:50%;padding:24px;background:#fff;border:1px solid #ccc}' +
+      '.yes{background:#0a7d32;color:#fff;border:0;padding:14px 28px;font-size:18px}.no{background:none;border:0;color:#333;font-size:13px;text-decoration:underline}']),
+      h('div', { class: 'd', role: 'dialog' }, [
+        h('h2', {}, [h('slot', { name: 'title' })]),
+        h('button', { class: 'yes' }, [h('slot', { name: 'yes' })]),
+        h('button', { class: 'no' }, [h('slot', { name: 'no' })])
+      ]));
+  });
+  define('sale-note', function (root) {
+    root.append(h('p', { id: 'dup' }, ['Hurry, sale ends today']));
+  });
+  define('twin-exact', function (root) {
+    root.append(h('p', {}, ['Only 1 left in stock']));
+  });
+  define('twin-host', function (root) {
+    root.append(h('p', {}, ['Shadow twin, only 3 left in stock']), h('slot'));
+  });
+</script>
+</body></html>

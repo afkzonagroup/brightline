@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Hash SPA</title></head>
+<body>
+<!-- A single-page app with a hash router. #/checkout is a page of its own; #top is not. -->
+<nav id="top"><a href="#/">Home</a> <a href="#/checkout">Checkout</a> <a href="#top">Back to top</a></nav>
+<main id="app"></main>
+<script>
+  var app = document.getElementById('app');
+  function render() {
+    app.replaceChildren();
+    if (location.hash === '#/checkout') {
+      var label = document.createElement('label');
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = true;
+      label.append(box, ' Add travel insurance (+€9.99)');
+      var h1 = document.createElement('h1');
+      h1.textContent = 'Checkout';
+      app.append(h1, label);
+    } else if (location.hash !== '#top') {
+      var title = document.createElement('h1');
+      title.textContent = 'Kettle';
+      app.append(title);
+    }
+  }
+  window.addEventListener('hashchange', render);
+  render();
+</script>
+</body></html>

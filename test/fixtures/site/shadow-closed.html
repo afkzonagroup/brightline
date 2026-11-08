@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Closed shadow root</title></head>
+<body>
+<h1>Your booking</h1>
+<sealed-extras></sealed-extras>
+<script>
+  // A closed shadow root cannot be read from page script, so Brightline does not
+  // see this pre-ticked extra or this decline wording (a documented limit).
+  customElements.define('sealed-extras', class extends HTMLElement {
+    connectedCallback() {
+      var root = this.attachShadow({ mode: 'closed' });
+      var label = document.createElement('label');
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = true;
+      label.append(box, ' Add travel insurance (+€9.99)');
+      var no = document.createElement('button');
+      no.textContent = 'No thanks, I prefer to pay full price';
+      root.append(label, no);
+    }
+  });
+</script>
+</body></html>
