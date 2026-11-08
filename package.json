@@ -82,5 +82,8 @@
     "@playwright/test": {
       "optional": true
     }
+  },
+  "overrides": {
+    "minimatch": "11.0.5"
   }
 }
