@@ -52,9 +52,26 @@ export function findPrefix(text: string, phrases: readonly SourcedPhrase[]): Sou
   return phrases.find((p) => phraseRegex(p.text, true).test(t));
 }
 
+const TRAILING_PUNCTUATION = new Set(['.', '!', '?', ':', ';', ',', '"', "'", '»', '«', '›', '‹', '>', '→']);
+
+/**
+ * Removes trailing characters from `chars` and trailing whitespace in one linear pass. Used instead of a
+ * `/[…]+$/` regular expression, which backtracks quadratically on long runs of those characters that are
+ * not at the end (page text is attacker-controlled).
+ */
+export function trimTrailing(text: string, chars: ReadonlySet<string>): string {
+  let end = text.length;
+  while (end > 0) {
+    const c = text.charAt(end - 1);
+    if (!chars.has(c) && !/\s/u.test(c)) break;
+    end--;
+  }
+  return text.slice(0, end);
+}
+
 /** True if normalised `text` equals one of the phrases (ignoring trailing punctuation). */
 export function equalsPhrase(text: string, phrases: readonly SourcedPhrase[]): SourcedPhrase | undefined {
-  const t = normalizeText(text).replace(/[\s.!?:;,"'»«›‹>→]+$/u, '');
+  const t = trimTrailing(normalizeText(text), TRAILING_PUNCTUATION);
   return phrases.find((p) => normalizeText(p.text) === t);
 }
 
