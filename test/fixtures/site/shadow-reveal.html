@@ -14,7 +14,7 @@
       var area = document.createElement('div');
       root.append(area);
       document.getElementById('show').addEventListener('click', function () {
-        fetch('/slow?ms=400').then(function () {
+        fetch('/slow/400').then(function () {
           setTimeout(function () {
             var p = document.createElement('p');
             p.textContent = 'Loading offers';

@@ -18,7 +18,7 @@
     if (path === '/spa/checkout') {
       // The checkout is rendered once its data arrives from the API.
       app.append(h('p', {}, ['Loading']));
-      fetch('/slow?ms=600').then(function () {
+      fetch('/slow/600').then(function () {
         if (location.pathname !== '/spa/checkout') return;
         app.replaceChildren(
           h('h1', {}, ['Checkout']),
