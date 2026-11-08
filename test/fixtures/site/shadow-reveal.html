@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Offers on request</title></head>
+<body>
+<h1>Kettle</h1>
+<button id="show">Show offers</button>
+<offer-panel></offer-panel>
+<script>
+  // Clicking "Show offers" loads data, then renders the offer step by step inside
+  // an open shadow root. Nothing changes in the light DOM.
+  customElements.define('offer-panel', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      var root = this.attachShadow({ mode: 'open' });
+      var area = document.createElement('div');
+      root.append(area);
+      document.getElementById('show').addEventListener('click', function () {
+        fetch('/slow/400').then(function () {
+          setTimeout(function () {
+            var p = document.createElement('p');
+            p.textContent = 'Loading offers';
+            area.append(p);
+          }, 150);
+          setTimeout(function () {
+            var h2 = document.createElement('h2');
+            h2.textContent = 'Offers for you';
+            area.append(h2);
+          }, 300);
+          setTimeout(function () {
+            var dialog = document.createElement('div');
+            dialog.setAttribute('role', 'dialog');
+            var label = document.createElement('label');
+            var box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = true;
+            label.append(box, ' Add extended warranty (+€19.99)');
+            var no = document.createElement('button');
+            no.textContent = 'No thanks, I prefer to pay full price';
+            dialog.append(label, no);
+            area.append(dialog);
+          }, 450);
+        });
+      });
+    }
+  });
+</script>
+</body></html>

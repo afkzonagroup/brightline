@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Shadow shop</title></head>
+<body>
+<h1>Weekend trip</h1>
+<p>Price: €199.00</p>
+<trip-extras></trip-extras>
+<deal-timer></deal-timer>
+<discount-popup></discount-popup>
+<script>
+  // Web components with open shadow roots, built with DOM calls as a framework would.
+  function h(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    (children || []).forEach(function (c) { node.append(c); });
+    return node;
+  }
+  function define(name, build) {
+    customElements.define(name, class extends HTMLElement {
+      connectedCallback() { if (!this.shadowRoot) build(this.attachShadow({ mode: 'open' })); }
+    });
+  }
+  define('trip-extras', function (root) {
+    var style = h('style', {}, ['label{display:block;margin:6px 0}']);
+    root.append(style, h('h2', {}, ['Extras']),
+      h('label', {}, [h('input', { type: 'checkbox', checked: '' }), ' Add travel insurance (+€9.99)']),
+      h('label', {}, [h('input', { type: 'checkbox' }), ' Gift wrapping (+€3.00)']),
+      h('a', { href: '/shadow-nested.html' }, ['More trips']));
+  });
+  define('deal-timer', function (root) {
+    // Restarts on every load: a fake deadline.
+    var deadline = Date.now() + 15 * 60 * 1000;
+    var timer = h('span', { id: 'timer' }, ['--:--:--']);
+    root.append(h('p', {}, ['Offer ends in ', timer]));
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function render() {
+      var s = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+      timer.textContent = pad(Math.floor(s / 3600)) + ':' + pad(Math.floor((s % 3600) / 60)) + ':' + pad(s % 60);
+    }
+    render();
+    setInterval(render, 200);
+  });
+  define('discount-popup', function (root) {
+    var style = h('style', {}, ['.modal{position:fixed;top:20%;left:25%;width:50%;padding:24px;background:#fff;border:1px solid #ccc}' +
+      '.yes{background:#0a7d32;color:#fff;border:0;padding:14px 28px;font-size:18px}' +
+      '.no{background:none;border:0;color:#333;font-size:14px;text-decoration:underline}']);
+    root.append(style, h('div', { class: 'modal', role: 'dialog', 'aria-label': 'Discount' }, [
+      h('h2', {}, ['Get 10% off your first order']),
+      h('button', { class: 'yes' }, ['Yes, give me 10% off']),
+      h('button', { class: 'no' }, ['No thanks, I prefer to pay full price'])
+    ]));
+  });
+</script>
+</body></html>

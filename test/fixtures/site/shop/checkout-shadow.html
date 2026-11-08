@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Checkout</title></head>
+<body><h1>Review your order</h1>
+<!-- The total and the order button live in a shadow root; the button's label is slotted. -->
+<order-summary>Continue</order-summary>
+<script>
+  customElements.define('order-summary', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      var root = this.attachShadow({ mode: 'open' });
+      var lines = document.createElement('div');
+      ['Kettle €50.00', 'Service fee €4.99'].forEach(function (t) {
+        var p = document.createElement('p');
+        p.textContent = t;
+        lines.append(p);
+      });
+      var total = document.createElement('p');
+      var amount = document.createElement('span');
+      amount.id = 'total';
+      amount.textContent = '€54.99';
+      total.append('Total: ', amount);
+      var button = document.createElement('button');
+      button.id = 'place';
+      button.append(document.createElement('slot'));
+      root.append(lines, total, button);
+    }
+  });
+</script>
+</body></html>

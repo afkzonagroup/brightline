@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CLAIM_PATTERNS, CONFIRMSHAMING_PHRASES, PRIOR_PRICE_PHRASES } from '../../src/data/phrases.js';
 import { GENERIC_LABELS, OFFICIAL_ORDER_BUTTON_LABELS, PAYMENT_WORDS } from '../../src/legal/order-button-labels.js';
 import { PROVISIONS, getProvision } from '../../src/legal/provisions.js';
-import { amountsIn, crawlKey, isCrawlable, launchErrorMessage, normaliseLimits, scan } from '../../src/scan.js';
+import { amountsIn, crawlKey, isCrawlable, isHashRoute, isRouteChange, launchErrorMessage, normaliseLimits, scan } from '../../src/scan.js';
 import { colorDistance, contrastRatio, over, parseColor } from '../../src/util/color.js';
 import { ensureSubdir, isSafeFileName, safeWriteFile } from '../../src/util/files.js';
 import { clip, equalsPhrase, findPhrase, findPrefix, normalizeText } from '../../src/util/text.js';
@@ -128,6 +128,26 @@ describe('crawl helpers', () => {
     expect(isCrawlable('https://shop.example/a.pdf', origin)).toBeNull();
     expect(isCrawlable('nonsense', origin)).toBeNull();
     expect(crawlKey(new URL('https://shop.example/a#x'))).toBe('https://shop.example/a');
+  });
+  it('keeps hash routes (#/path, #!/path) as pages of their own, drops other fragments', () => {
+    expect(isHashRoute('#/checkout')).toBe(true);
+    expect(isHashRoute('#!/checkout')).toBe(true);
+    expect(isHashRoute('#/')).toBe(false);
+    expect(isHashRoute('#section')).toBe(false);
+    expect(isHashRoute('')).toBe(false);
+    expect(crawlKey(new URL('https://shop.example/app#/checkout'))).toBe('https://shop.example/app#/checkout');
+    expect(crawlKey(new URL('https://shop.example/app#!/cart?x=1'))).toBe('https://shop.example/app#!/cart?x=1');
+    expect(crawlKey(new URL('https://shop.example/app#/'))).toBe('https://shop.example/app');
+    expect(crawlKey(new URL('https://shop.example/app#top'))).toBe('https://shop.example/app');
+  });
+  it('tells a client-side route change from a jump within the page', () => {
+    expect(isRouteChange('https://shop.example/app', 'https://shop.example/app/checkout')).toBe(true);
+    expect(isRouteChange('https://shop.example/app', 'https://shop.example/app?step=2')).toBe(true);
+    expect(isRouteChange('https://shop.example/app#/', 'https://shop.example/app#/checkout')).toBe(true);
+    expect(isRouteChange('https://shop.example/app', 'https://shop.example/app#reviews')).toBe(false);
+    expect(isRouteChange('https://shop.example/app', 'https://shop.example/app')).toBe(false);
+    expect(isRouteChange('https://shop.example/app', 'https://other.example/app')).toBe(false);
+    expect(isRouteChange('about:blank', 'nonsense')).toBe(false);
   });
   it('clamps limits', () => {
     expect(normaliseLimits({ url: 'x', maxPages: 10_000, maxDurationMs: 1, maxRedirects: 99 })).toMatchObject({ maxPages: 200, maxDurationMs: 5000, maxRedirects: 20 });

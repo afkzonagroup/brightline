@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Consent component</title>
+<style>
+.accept{background:#1a56b5;color:#fff;border:0;padding:16px 64px;font-size:20px;font-weight:700}
+.reject{background:none;border:0;color:#c8c8c8;font-size:11px;padding:0}
+</style></head>
+<body><p>Content</p>
+<!-- A consent banner component: the dialog is in its shadow root, the text and
+     buttons are light DOM slotted into it. -->
+<consent-banner>
+  <p>We use cookies and similar tracking to personalise ads.</p>
+  <button slot="actions" class="accept">Accept all</button>
+  <button slot="actions" class="reject">reject</button>
+</consent-banner>
+<script>
+  customElements.define('consent-banner', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      var root = this.attachShadow({ mode: 'open' });
+      var style = document.createElement('style');
+      style.textContent = '.box{position:fixed;bottom:0;left:0;right:0;padding:24px;background:#ffffff;border-top:1px solid #ddd}';
+      var box = document.createElement('div');
+      box.className = 'box';
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-label', 'Cookies');
+      var actions = document.createElement('div');
+      var named = document.createElement('slot');
+      named.name = 'actions';
+      actions.append(named);
+      box.append(document.createElement('slot'), actions);
+      root.append(style, box);
+    }
+  });
+</script>
+</body></html>

@@ -9,7 +9,7 @@
 
 import type { Page } from 'playwright-core';
 import { BrowserSession } from './browser/session.js';
-import { labelOfSelector, readTimers, screenshotElement, snapshotPage, textOfSelector, collectLinks } from './browser/page-ops.js';
+import { labelOfSelector, pushClientRoute, readTimers, screenshotElement, snapshotPage, textOfSelector, collectLinks, settleAfter } from './browser/page-ops.js';
 import type { PageSnapshot, TimerReading } from './browser/snapshot.js';
 import { MONEY_SOURCE } from './data/phrases.js';
 import { DETECTOR_IDS, runPageDetectors } from './detectors/index.js';
@@ -98,11 +98,39 @@ export function normaliseLimits(options: ScanOptions): ReportLimits {
 
 const ASSET_EXTENSION = /\.(?:png|jpe?g|gif|webp|avif|svg|ico|pdf|zip|gz|tgz|rar|7z|mp[34]|webm|mov|avi|wav|ogg|woff2?|ttf|otf|eot|css|js|mjs|json|xml|rss|txt|csv|xlsx?|docx?|pptx?|dmg|exe|apk)$/i;
 
-/** Canonical form for crawl de-duplication: no hash, default port dropped by URL. Pure. */
+/**
+ * True for a fragment that names a client-side route (`#/cart`, `#!/cart`)
+ * rather than a place on the page (`#section`). Pure.
+ */
+export function isHashRoute(hash: string): boolean {
+  return /^#!?\/./.test(hash);
+}
+
+/**
+ * Canonical form for crawl de-duplication: default port dropped by URL, hash
+ * removed unless it is a client-side route, which is a page of its own. Pure.
+ */
 export function crawlKey(url: URL): string {
   const u = new URL(url.href);
-  u.hash = '';
+  if (!isHashRoute(u.hash)) u.hash = '';
   return u.href;
+}
+
+/**
+ * True if the page moved from `before` to `after` to another route of the same
+ * origin: path, query or hash route changed (a jump to `#section` does not
+ * count). Pure.
+ */
+export function isRouteChange(before: string, after: string): boolean {
+  let a: URL;
+  let b: URL;
+  try {
+    a = new URL(before);
+    b = new URL(after);
+  } catch {
+    return false;
+  }
+  return a.origin === b.origin && crawlKey(a) !== crawlKey(b);
 }
 
 /** True if a link should be crawled from `origin`. Pure. */
@@ -169,6 +197,21 @@ async function addFindings(state: State, page: Page | null, pageUrl: string, dra
 
 async function settle(page: Page, timeoutMs: number): Promise<void> {
   await page.waitForLoadState('networkidle', { timeout: Math.min(3000, timeoutMs) }).catch(() => undefined);
+}
+
+/**
+ * Open `target` as a client-side route: load `from` (a page of the same origin
+ * that loads directly and links to `target`), push `target` onto its history
+ * and wait for the router to render it. Succeeds only if the URL is now
+ * `target`, no new document was loaded and elements were added or removed.
+ * Same origin is checked by the caller and enforced by the browser; all
+ * requests the route makes pass the network guard like any other.
+ */
+async function openClientRoute(page: Page, from: URL, target: URL, state: State): Promise<boolean> {
+  const nav = await navigate(page, from.href, state);
+  if (nav.error !== null || nav.notHtml === true) return false;
+  const { changed, loaded } = await settleAfter(page, () => pushClientRoute(page, target.href));
+  return changed && !loaded && !page.isClosed() && crawlKey(new URL(page.url())) === crawlKey(target);
 }
 
 function redirectCount(response: Awaited<ReturnType<Page['goto']>>): number {
@@ -250,7 +293,9 @@ async function countdownCheck(session: BrowserSession, page: Page, url: string, 
 async function crawl(session: BrowserSession, start: URL, robots: RobotsRules, state: State, options: ScanOptions): Promise<void> {
   if (state.limits.maxPages === 0) return;
   const origin = start.origin;
-  const queue: URL[] = [start];
+  // `from` is a page that loads directly and links to `url`: the fallback for
+  // client-side routes that the server does not serve (HTTP 404).
+  const queue: { url: URL; from?: URL }[] = [{ url: start }];
   const seen = new Set<string>([crawlKey(start)]);
   const context = await session.newContext();
   let countdownPages = 0;
@@ -262,8 +307,9 @@ async function crawl(session: BrowserSession, start: URL, robots: RobotsRules, s
         state.notes.push('Time budget reached; crawl stopped early.');
         break;
       }
-      const url = queue.shift();
-      if (url === undefined) break;
+      const entry = queue.shift();
+      if (entry === undefined) break;
+      const { url, from } = entry;
       const pathWithQuery = `${url.pathname}${url.search}`;
       if (!robots.isAllowed(pathWithQuery)) {
         state.pages.push({ url: url.href, status: 'skipped-robots' });
@@ -272,7 +318,16 @@ async function crawl(session: BrowserSession, start: URL, robots: RobotsRules, s
       state.progress(`page ${String(state.pages.length + 1)}: ${url.href}`);
       const page = await context.newPage();
       try {
-        const nav = await navigate(page, url.href, state);
+        let nav = await navigate(page, url.href, state);
+        let clientRoute = false;
+        if (nav.error !== null && nav.httpStatus === 404 && from !== undefined && timeLeft(state) > 5000) {
+          // A single-page app whose router handles this path in the browser.
+          clientRoute = await openClientRoute(page, from, url, state).catch(() => false);
+          if (clientRoute) {
+            nav = { error: null };
+            state.notes.push(`${url.href} returned HTTP 404 when loaded directly; it was reached by client-side navigation from ${from.href} and scanned.`);
+          }
+        }
         if (nav.error !== null) {
           state.pages.push({ url: url.href, status: 'error', error: nav.error, ...(nav.httpStatus === undefined ? {} : { httpStatus: nav.httpStatus }) });
           continue;
@@ -282,6 +337,9 @@ async function crawl(session: BrowserSession, start: URL, robots: RobotsRules, s
           continue;
         }
         const finalUrl = page.url();
+        // A page that moved itself to another route (history API) is not crawled twice.
+        const finalKey = isCrawlable(finalUrl, origin);
+        if (finalKey !== null) seen.add(crawlKey(finalKey));
         const firstAt = Date.now();
         const timers = state.enabled.has('countdown-reset') ? await readTimers(page).catch(() => [] as TimerReading[]) : [];
         const snapshot = await snapshotPage(page);
@@ -289,7 +347,8 @@ async function crawl(session: BrowserSession, start: URL, robots: RobotsRules, s
         await addFindings(state, page, finalUrl, runPageDetectors(snapshot, state.enabled));
         state.pages.push({ url: url.href, status: 'scanned', ...(nav.httpStatus === undefined ? {} : { httpStatus: nav.httpStatus }) });
 
-        if (timers.length > 0 && countdownPages < maxCountdownPages && timeLeft(state) > waitMs + 2 * state.limits.navigationTimeoutMs) {
+        // A client-side route cannot be reloaded (the server answers 404), so it gets no reload check.
+        if (!clientRoute && timers.length > 0 && countdownPages < maxCountdownPages && timeLeft(state) > waitMs + 2 * state.limits.navigationTimeoutMs) {
           countdownPages += 1;
           const observations = await countdownCheck(session, page, url.href, timers, firstAt, state, waitMs);
           await addFindings(state, page, finalUrl, detectCountdownReset(observations));
@@ -301,7 +360,7 @@ async function crawl(session: BrowserSession, start: URL, robots: RobotsRules, s
           const key = crawlKey(next);
           if (seen.has(key) || seen.size > 5000) continue;
           seen.add(key);
-          queue.push(new URL(key));
+          queue.push({ url: new URL(key), from: clientRoute && from !== undefined ? from : url });
         }
       } catch (pageError) {
         // A page that navigates away or crashes during analysis must not stop the scan.
@@ -344,8 +403,21 @@ async function runJourney(session: BrowserSession, journey: Journey, state: Stat
   let stepsRun = 0;
   let error: string | undefined;
   const timeout = (): number => Math.max(1000, Math.min(state.limits.navigationTimeoutMs, timeLeft(state)));
+  // The same finding (detector, element, text, page) is listed once per journey,
+  // so a route scanned after a click and marked later is not reported twice.
+  const reported = new Set<string>();
+  const routes: string[] = [];
   try {
     const page = await context.newPage();
+    const addPageFindings = async (pageUrl: string, snapshot: PageSnapshot): Promise<void> => {
+      const fresh = runPageDetectors(snapshot, state.enabled).filter((d) => {
+        const key = JSON.stringify([pageUrl, d.detector, d.evidence.selector, d.evidence.text]);
+        if (reported.has(key)) return false;
+        reported.add(key);
+        return true;
+      });
+      await addFindings(state, page, pageUrl, fresh);
+    };
     state.progress(`journey "${journey.name}": ${journey.startUrl}`);
     const nav = await navigate(page, journey.startUrl, state);
     if (nav.error !== null) throw new Error(`Start URL: ${nav.error}`);
@@ -359,10 +431,27 @@ async function runJourney(session: BrowserSession, journey: Journey, state: Stat
             if (r.error !== null) throw new Error(r.error);
             break;
           }
-          case 'click':
-            await page.locator(step.selector).first().click({ timeout: timeout() });
-            await settle(page, state.limits.navigationTimeoutMs);
+          case 'click': {
+            const before = page.url();
+            // Content the click reveals (a dialog, a route the app renders after
+            // fetching data, in the light DOM or a shadow root) is waited for.
+            const { loaded } = await settleAfter(page, async () => {
+              await page.locator(step.selector).first().click({ timeout: timeout() });
+              await settle(page, state.limits.navigationTimeoutMs);
+            });
+            const after = page.url();
+            if (!loaded && isRouteChange(before, after)) {
+              // An in-page route change: scan the new route as the crawler would a page.
+              routes.push(after);
+              try {
+                await addPageFindings(after, await snapshotPage(page));
+              } catch (routeError) {
+                const msg = routeError instanceof Error ? (routeError.message.split('\n')[0] ?? '') : '';
+                state.notes.push(`Journey "${journey.name}": the route ${after} could not be analysed: ${msg.slice(0, 160)}`);
+              }
+            }
             break;
+          }
           case 'fill':
             await page.locator(step.selector).first().fill(step.value, { timeout: timeout() });
             break;
@@ -381,7 +470,7 @@ async function runJourney(session: BrowserSession, journey: Journey, state: Stat
           case 'mark': {
             const pageUrl = page.url();
             const snapshot = await snapshotPage(page);
-            await addFindings(state, page, pageUrl, runPageDetectors(snapshot, state.enabled));
+            await addPageFindings(pageUrl, snapshot);
             if (step.total !== undefined) {
               const text = await textOfSelector(page, step.total);
               checkpoints.push({
@@ -419,6 +508,10 @@ async function runJourney(session: BrowserSession, journey: Journey, state: Stat
     error = journeyError instanceof Error ? journeyError.message.slice(0, 300) : 'Journey failed';
   } finally {
     await context.close().catch(() => undefined);
+  }
+  if (routes.length > 0) {
+    const shown = routes.slice(0, 10).join(', ');
+    state.notes.push(`Journey "${journey.name}": ${String(routes.length)} client-side route change(s) scanned: ${shown}${routes.length > 10 ? ', ...' : ''}.`);
   }
   return { name: journey.name, completed: error === undefined, stepsRun, marks, ...(error === undefined ? {} : { error }) };
 }

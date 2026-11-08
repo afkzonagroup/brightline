@@ -140,6 +140,16 @@ Selectors are CSS, or Playwright's `text=`, `role=`, `id=`, `data-testid=` and `
 
 Check a journey without scanning: `npx brightline validate-journey journey.json`.
 
+After a `click`, Brightline waits until the page has no requests in flight and its DOM (including open shadow roots) has stopped changing, for at most 2.5 seconds, so content the click reveals is read by the next step. If the click changes the route inside the page (history API or hash route) without loading a new document, the new route is scanned with the page detectors, as the crawler would scan a page. Within one journey the same finding (detector, element, text and page) is listed once.
+
+## Shadow DOM and single-page apps
+
+- **Open shadow roots** are read like the rest of the page: dialogs, buttons, links, checkboxes, text and prices inside web components, nested shadow roots and slotted content. A checkbox in a shadow root takes its label from its own tree, or from its host (for example `<label>Insurance <x-check></x-check></label>`). The walk is iterative and bounded: at most 100 000 elements, 2 000 shadow roots and 32 levels of nesting per page state; beyond that the report notes that caps were reached.
+- **Evidence selectors** for elements in shadow roots are plain CSS paths through the host, in the form Playwright resolves (`html > body > trip-extras > label:nth-of-type(1) > input`); Playwright's CSS engine pierces open shadow roots. When a light-DOM child and a shadow child of the same host cannot be told apart by any selector, the evidence selector is left empty rather than pointing at the wrong element.
+- **Hash routes** (`#/checkout`, `#!/checkout`) are crawled as pages of their own; other fragments (`#reviews`) are not.
+- **History-API routes**: when a same-origin link returns HTTP 404 on a direct load, Brightline loads the page that linked to it, pushes the route onto the page's history and dispatches `popstate`, as the browser does on Back and Forward. If the app renders the route, it is scanned and the report notes how it was reached. Such routes get no countdown reload check, because they cannot be reloaded.
+- Links inside open shadow roots are followed.
+
 ## Playwright test helper
 
 Use the page detectors inside your own Playwright tests. The helper reads the page you already opened; it fetches nothing itself. Countdown and journey checks are not part of the helper.
@@ -225,11 +235,13 @@ All `scan()` options (CLI flags in brackets):
 
 - Heuristics, not judgement. Findings are prompts for review. Brightline cannot know whether a stock count, a deadline or a prior price is true.
 - Known false-positive risks: per-visitor timers that are real (seat or cart holds) show as low `countdown-reset`; a timer that is not about an offer (for example a video's remaining time) and restarts on reload shows as high `countdown-reset`; a struck-through price that is in fact the 30-day lowest price shows as low `price-reduction-prior-price`; "Express" or "Premium" options that are free, or pre-selected paid options the consumer asked for earlier, show as `preselected-option`; a "Place order" button on a page where the obligation to pay is stated elsewhere shows as medium; a total that rises because of a choice the user made shows as low `hidden-costs` unless the journey marks `expectTotalChange`; mildly worded declines with a guilt word ("No, continue without discount") may show as low `confirmshaming`; marketing claims in reviews or editorial text may match scarcity patterns.
-- Known false negatives: images and canvas text are not read; content inside shadow DOM is not read; claims and phrases in languages other than those listed are not matched; cookie banners inside cross-origin iframes are not measured; designs that only appear after scrolling or hovering may be missed.
+- Known false negatives: images and canvas text are not read; claims and phrases in languages other than those listed are not matched; designs that only appear after scrolling or hovering may be missed.
+- **Closed shadow roots are not read.** Their content cannot be reached from page script by design (`attachShadow({ mode: 'closed' })`), so a pattern inside one is not found.
+- **Frames are not read.** Content inside iframes is not examined; for cross-origin frames (for example a consent banner served from a consent platform's domain) this is a browser security boundary that Brightline does not cross.
 - Phrase lists: English is written by the maintainers. Every phrase in German, French, Spanish, Italian, Dutch, Polish and Lithuanian is marked `source: "translation"` in `src/data/phrases.ts` and `src/legal/order-button-labels.ts` and **needs native-speaker review**. Only the 23 order-button labels marked `source: "official"` are taken from the legal text.
 - Not covered: subscription traps and cancellation flows (CRD Art. 11a, DSA Art. 25(3)(c)), nagging (DSA Art. 25(3)(b)), "free" claims (UCPD Annex I point 20), bait advertising (points 5 and 6), fake reviews (points 23b and 23c), personalised pricing (CRD Art. 6(1)(ea)), accessibility, and cookie behaviour.
-- Single-page apps that never trigger a navigation are scanned as one page unless you add a journey.
-- Text blocks longer than 600 characters and DOMs beyond 20 000 elements are not fully examined; the report notes when a cap was reached.
+- Single-page app routes that are only reached by clicking buttons (not links) are found only with a journey. A route is detected after a journey click only when the URL changes; views that change without a URL change are read by the next `mark`. Content that appears on a timer long after a click, with no network activity in between, may be missed.
+- Text blocks longer than 600 characters and DOMs beyond 20 000 elements are not fully examined; buttons, links and checkboxes are read within the first 100 000 elements (light DOM and open shadow roots together). The report notes when a cap was reached.
 - A site that detects automated browsers can show Brightline a different page. Page scripts run in the same JavaScript world as the collector and could tamper with what it reads; Brightline treats everything it reads from a page as untrusted data.
 
 ## Security

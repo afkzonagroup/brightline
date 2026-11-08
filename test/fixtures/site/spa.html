@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SPA shop</title></head>
+<body>
+<!-- A single-page app with a history router. The server does not serve /spa/checkout
+     (HTTP 404), so the checkout exists only as a client-side route. -->
+<nav><a href="/spa.html" data-route>Home</a> <a href="/spa/checkout" data-route id="to-checkout">Checkout</a></nav>
+<main id="app"></main>
+<script>
+  var app = document.getElementById('app');
+  function h(tag, attrs, children) {
+    var node = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    (children || []).forEach(function (c) { node.append(c); });
+    return node;
+  }
+  function render(path) {
+    app.replaceChildren();
+    if (path === '/spa/checkout') {
+      // The checkout is rendered once its data arrives from the API.
+      app.append(h('p', {}, ['Loading']));
+      fetch('/slow/600').then(function () {
+        if (location.pathname !== '/spa/checkout') return;
+        app.replaceChildren(
+          h('h1', {}, ['Checkout']),
+          h('p', {}, ['Kettle €50.00']),
+          h('label', {}, [h('input', { type: 'checkbox', checked: '' }), ' Add travel insurance (+€9.99)']),
+          h('p', {}, ['Total: ', h('span', { id: 'total' }, ['€59.99'])]),
+          h('button', { id: 'place' }, ['Continue']));
+      });
+    } else {
+      app.append(h('h1', {}, ['Kettle']), h('p', {}, ['Price: €50.00']));
+    }
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-route]');
+    if (!a) return;
+    e.preventDefault();
+    history.pushState(null, '', a.getAttribute('href'));
+    render(location.pathname);
+  });
+  window.addEventListener('popstate', function () { render(location.pathname); });
+  render(location.pathname);
+</script>
+</body></html>

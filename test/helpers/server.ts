@@ -82,6 +82,13 @@ export async function startFixtures(): Promise<Fixtures> {
       case '/big':
         send(200, { 'content-type': 'text/html' }, `<!doctype html><p>${'x'.repeat(200 * 1024)}</p>`);
         return;
+      case '/slow/400':
+      case '/slow/600':
+        // Data that arrives late, as from an API: content rendered from it must still be collected.
+        setTimeout(() => {
+          send(200, { 'content-type': 'text/plain' }, 'ok');
+        }, url.pathname === '/slow/400' ? 400 : 600);
+        return;
       case '/image.png':
         send(200, { 'content-type': 'image/png' }, Buffer.from('89504e470d0a1a0a', 'hex'));
         return;

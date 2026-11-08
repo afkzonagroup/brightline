@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Overlay component</title></head>
+<body><p>Shop content</p>
+<!-- A fixed overlay with no dialog role: the host is positioned, its buttons are in its shadow root. -->
+<promo-bar></promo-bar>
+<script>
+  customElements.define('promo-bar', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      var root = this.attachShadow({ mode: 'open' });
+      var style = document.createElement('style');
+      style.textContent = ':host{position:fixed;top:20%;left:25%;width:50%;padding:24px;background:#fff;border:1px solid #ccc}' +
+        '.yes{background:#0a7d32;color:#fff;border:0;padding:14px 28px;font-size:18px}' +
+        '.no{background:none;border:0;color:#333;font-size:13px;text-decoration:underline}';
+      var title = document.createElement('h2');
+      title.textContent = 'Get 10% off your first order';
+      var yes = document.createElement('button');
+      yes.className = 'yes';
+      yes.textContent = 'Yes, give me 10% off';
+      var no = document.createElement('button');
+      no.className = 'no';
+      no.textContent = 'No thanks, maybe later';
+      root.append(style, title, yes, no);
+    }
+  });
+</script>
+</body></html>
