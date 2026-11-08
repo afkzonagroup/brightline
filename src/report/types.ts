@@ -9,7 +9,7 @@ import type { Confidence, DetectorId, Finding } from '../types.js';
 export const REPORT_SCHEMA_VERSION = '1.0.0';
 
 /** Package version. Kept in sync with package.json by a test. */
-export const TOOL_VERSION = '0.1.0';
+export const TOOL_VERSION = '0.1.1';
 
 /** Fixed disclaimer included in every report. */
 export const DISCLAIMER =
