@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BlockedRequestError, checkAddress, checkUrlSyntax, resolveAndCheck, type Resolver } from '../../src/net/guard.js';
+import { BlockedRequestError, checkAddress, checkUrlSyntax, parseAllowEntry, portOf, resolveAndCheck, type Resolver } from '../../src/net/guard.js';
 
 const resolver =
   (table: Record<string, string[]>): Resolver =>
@@ -113,5 +113,43 @@ describe('resolveAndCheck', () => {
     expect(reasonSync(() => { checkAddress('fd00:ec2::254', { allowAddresses: ['fd00:ec2::254'] }); })).toBe('metadata');
     // A mapped form of an allowed IPv4 address is a different address and stays blocked.
     expect(await reasonOf(resolveAndCheck('http://[::ffff:10.0.0.5]/', policy({}, ['10.0.0.5'])))).toBe('private');
+  });
+
+  it('parses allow-list entries with and without a port', () => {
+    expect(parseAllowEntry('10.0.0.5')).toEqual({ address: '10.0.0.5', port: null });
+    expect(parseAllowEntry('10.0.0.5:8080')).toEqual({ address: '10.0.0.5', port: 8080 });
+    expect(parseAllowEntry('fd00::5')).toEqual({ address: 'fd00:0:0:0:0:0:0:5', port: null });
+    expect(parseAllowEntry('[fd00::5]')).toEqual({ address: 'fd00:0:0:0:0:0:0:5', port: null });
+    expect(parseAllowEntry('[fd00::5]:65535')).toEqual({ address: 'fd00:0:0:0:0:0:0:5', port: 65535 });
+    // Without brackets every colon belongs to the IPv6 address: this is the address fd00::5:80 on every port.
+    expect(parseAllowEntry('fd00::5:80')).toEqual({ address: 'fd00:0:0:0:0:0:5:80', port: null });
+    for (const bad of ['', 'staging.example', '10.0.0.5:', '10.0.0.5:0', '10.0.0.5:65536', '10.0.0.5:080', '10.0.0.5:8o', '10.0.0.5: 80', '[10.0.0.5]:80', '[fd00::5', '[fd00::5]80', '[fd00::5]:', 'a'.repeat(65)]) {
+      expect(parseAllowEntry(bad), bad).toBeNull();
+    }
+  });
+
+  it('an entry with a port allows only that port', async () => {
+    expect(await reasonOf(resolveAndCheck('http://10.0.0.5:8080/', policy({}, ['10.0.0.5:8080'])))).toBe('allowed');
+    expect(await reasonOf(resolveAndCheck('http://10.0.0.5:8081/', policy({}, ['10.0.0.5:8080'])))).toBe('private');
+    expect(await reasonOf(resolveAndCheck('http://10.0.0.5/', policy({}, ['10.0.0.5:80'])))).toBe('allowed');
+    expect(await reasonOf(resolveAndCheck('https://10.0.0.5/', policy({}, ['10.0.0.5:80'])))).toBe('private');
+    expect(await reasonOf(resolveAndCheck('https://10.0.0.5/', policy({}, ['10.0.0.5:443'])))).toBe('allowed');
+    expect(await reasonOf(resolveAndCheck('http://[fd00::5]:3000/', policy({}, ['[fd00::5]:3000'])))).toBe('allowed');
+    expect(await reasonOf(resolveAndCheck('http://[fd00::5]:3001/', policy({}, ['[fd00::5]:3000'])))).toBe('unique-local');
+    // Names resolve first; the port of the URL still has to match.
+    expect(await reasonOf(resolveAndCheck('http://stage.example:8080/', policy({ 'stage.example': ['10.0.0.5'] }, ['10.0.0.5:8080'])))).toBe('allowed');
+    expect(await reasonOf(resolveAndCheck('http://stage.example:9000/', policy({ 'stage.example': ['10.0.0.5'] }, ['10.0.0.5:8080'])))).toBe('private');
+    // A check without a port never matches a port entry, and metadata stays blocked with a port too.
+    expect(reasonSync(() => { checkAddress('10.0.0.5', { allowAddresses: ['10.0.0.5:80'] }); })).toBe('private');
+    expect(await reasonOf(resolveAndCheck('http://169.254.169.254/', policy({}, ['169.254.169.254:80'])))).toBe('metadata');
+    // Invalid entries never allow anything.
+    expect(await reasonOf(resolveAndCheck('http://10.0.0.5/', policy({}, ['10.0.0.5:0'])))).toBe('private');
+  });
+
+  it('knows the default port of each scheme', () => {
+    expect(portOf(new URL('http://a.example/'))).toBe(80);
+    expect(portOf(new URL('https://a.example/'))).toBe(443);
+    expect(portOf(new URL('https://a.example:8443/'))).toBe(8443);
+    expect(portOf(new URL('http://a.example:443/'))).toBe(443);
   });
 });

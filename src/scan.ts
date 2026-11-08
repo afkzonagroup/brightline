@@ -18,7 +18,7 @@ import { detectHiddenCosts, parseAmount, type TotalCheckpoint } from './detector
 import { detectOrderButton, type OrderButtonObservation } from './detectors/order-button.js';
 import type { Journey } from './journey/schema.js';
 import { ByteBudget, type FetchLimits } from './net/fetcher.js';
-import { checkUrlSyntax, resolveAndCheck, systemResolver, type NetworkPolicy, type Resolver } from './net/guard.js';
+import { checkUrlSyntax, parseAllowEntry, resolveAndCheck, systemResolver, type NetworkPolicy, type Resolver } from './net/guard.js';
 import { fetchRobots } from './net/robots-fetch.js';
 import { ALLOW_ALL, type RobotsRules } from './net/robots.js';
 import {
@@ -466,7 +466,12 @@ export async function scan(options: ScanOptions): Promise<ScanReport> {
   const startedAt = new Date().toISOString();
   const limits = normaliseLimits(options);
   const start = checkUrlSyntax(options.url);
-  const policy: NetworkPolicy = { allowAddresses: [...(options.allowAddresses ?? [])], resolver: options.resolver ?? systemResolver };
+  const allowAddresses = [...(options.allowAddresses ?? [])];
+  if (allowAddresses.length > 20) throw new RangeError('allowAddresses: at most 20 entries');
+  for (const a of allowAddresses) {
+    if (parseAllowEntry(a) === null) throw new RangeError(`allowAddresses: not an IP address or address:port: ${JSON.stringify(a).slice(0, 60)}`);
+  }
+  const policy: NetworkPolicy = { allowAddresses, resolver: options.resolver ?? systemResolver };
   const fetchLimits: FetchLimits = { maxResponseBytes: limits.maxResponseBytes, requestTimeoutMs: limits.navigationTimeoutMs };
   const budget = new ByteBudget(limits.maxTotalBytes);
   // Refuse a blocked start URL (or journey start URL) before launching anything.

@@ -152,6 +152,9 @@ describe('main', () => {
     expect(c.err.join('\n')).not.toContain('/path/file.js');
     const d = io();
     expect(await main(['scan', 'https://a.example', '--allow-address', 'not-an-ip'], d.io)).toBe(2);
+    const e = io();
+    expect(await main(['scan', 'https://a.example', '--allow-address', '10.0.0.5:0'], e.io)).toBe(2);
+    expect(e.err.join('\n')).toContain('address:port');
   });
 
   it('validates journey files', async () => {

@@ -37,7 +37,7 @@ inputs:
     required: false
     default: none
   allow-addresses:
-    description: Private IP addresses that may be scanned (for a service started in the job), comma-separated.
+    description: Private IP addresses that may be scanned (for a service started in the job), comma-separated. Add a port (127.0.0.1:8080, [::1]:8080) to allow only that port.
     required: false
     default: ''
   ignore-robots:

@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Allow-list entries can name a port: `--allow-address 10.0.0.5:8080` or
+  `[fd00::5]:8080` opens only that port on a private address. A bare address
+  still opens every port. `scan()` now rejects invalid `allowAddresses`
+  entries and more than 20 of them before any network activity.
+
 ## [0.1.0] - 2026-11-08
 
 ### Added

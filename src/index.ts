@@ -43,7 +43,7 @@ export {
   parseTimerSeconds,
 } from './detectors/index.js';
 export { classifyIp, parseIp, type IpVerdict } from './net/ip.js';
-export { checkUrlSyntax, resolveAndCheck, BlockedRequestError, systemResolver, type NetworkPolicy, type Resolver, type ResolvedAddress } from './net/guard.js';
+export { checkUrlSyntax, parseAllowEntry, resolveAndCheck, BlockedRequestError, systemResolver, type AllowEntry, type NetworkPolicy, type Resolver, type ResolvedAddress } from './net/guard.js';
 export type { BlockedRequest } from './net/proxy.js';
 export type { Confidence, DetectorId, Evidence, Finding, DraftFinding } from './types.js';
 export type { PageSnapshot } from './browser/snapshot.js';

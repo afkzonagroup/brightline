@@ -47,7 +47,8 @@ Scan options:
   --format <f>            json, html or both (default both)
   --detectors <list>      Comma-separated detector ids (default all)
   --ignore-robots         Do not read robots.txt
-  --allow-address <ip>    Allow one private IP (your own staging server); repeatable
+  --allow-address <ip>    Allow one private IP (your own staging server), or one port
+                          on it as ip:port or [ipv6]:port; repeatable
   --fail-on <level>       Exit 1 if a finding is at least high, medium or low (default none)
   --no-sandbox            Run Chromium without its OS sandbox (containers only)
   --quiet                 Print only the summary line
