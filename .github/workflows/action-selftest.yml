@@ -1,0 +1,41 @@
+name: Action self-test
+
+# Runs the published composite action from this repository on a GitHub-hosted runner
+# against a fixture page served inside the job. Pull requests and manual runs only.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Serve the fixture site on the runner
+        run: |
+          python3 -m http.server 8080 --bind 127.0.0.1 --directory test/fixtures/site > /tmp/fixture-server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/preticked.html > /dev/null && exit 0; sleep 1; done
+          exit 1
+      - id: scan
+        uses: ./
+        with:
+          url: http://127.0.0.1:8080/preticked.html
+          max-pages: '1'
+          allow-addresses: 127.0.0.1
+          fail-on: none
+      - name: Check the outputs and reports
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings }}
+          REPORT_DIR: ${{ steps.scan.outputs.report-dir }}
+        run: |
+          set -euo pipefail
+          [[ "$FINDINGS" =~ ^[0-9]+$ ]] || { echo "findings is not a number: $FINDINGS"; exit 1; }
+          [ "$FINDINGS" -ge 1 ] || { echo "expected at least one finding on the pre-ticked fixture"; exit 1; }
+          test -s "$REPORT_DIR/report.json"
+          test -s "$REPORT_DIR/report.html"
+          echo "Action self-test passed: $FINDINGS findings"
