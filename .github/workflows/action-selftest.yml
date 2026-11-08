@@ -26,7 +26,7 @@ jobs:
         with:
           url: http://127.0.0.1:8080/preticked.html
           max-pages: '1'
-          allow-addresses: 127.0.0.1
+          allow-addresses: 127.0.0.1:8080
           fail-on: none
       - name: Check the outputs and reports
         env:

@@ -69,7 +69,7 @@ disclosure date with you. Supported version: the latest 0.x release.
 
 - Chromium vulnerabilities: keep `playwright-core` updated (Dependabot is configured). Do not run Brightline as root outside a container.
 - The guard cannot see inside HTTPS tunnels, so per-response size caps apply to plain HTTP and robots.txt; HTTPS traffic is limited by the total byte budget and timeouts.
-- `--allow-address` and `allowAddresses` deliberately open a private address, on every port. A scanned page (or a third-party script it loads) can then reach any service on that address. Use them only for your own servers, ideally on a machine with nothing else listening.
+- `--allow-address` and `allowAddresses` deliberately open a private address. A bare address opens every port on it, so a scanned page (or a third-party script it loads) can reach any service there. Give the port as well (`10.0.0.5:8080`, `[fd00::5]:8080`) to open only the service you are scanning. Use them only for your own servers. An IPv6 address with a port needs brackets: without them every colon belongs to the address, so the entry names a different address and allows nothing you meant.
 - A countdown that is not about an offer (for example a video's remaining time) and restarts on reload is reported with high confidence; the reviewer has to look at what the timer shows.
 - Site cookies set during a scan live in that scan's browser context and are sent back to the same site, as a normal browser would. Do not run journeys with real accounts.
 

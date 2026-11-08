@@ -24,6 +24,7 @@ export interface NetworkPolicy {
   /**
    * Exact IP addresses that may be fetched even though they are in a blocked
    * range (for example a staging server on your own private network).
+   * An entry is `10.0.0.5` (every port), `10.0.0.5:8080`, `fd00::5` or `[fd00::5]:8080`.
    * Cloud metadata addresses can never be allowed.
    */
   readonly allowAddresses: readonly string[];
@@ -93,14 +94,68 @@ export function hostOf(url: URL): string {
  *
  * @throws BlockedRequestError when the address is blocked and not allow-listed.
  */
-export function checkAddress(address: string, policy: Pick<NetworkPolicy, 'allowAddresses'>): void {
+export function checkAddress(address: string, policy: Pick<NetworkPolicy, 'allowAddresses'>, port?: number): void {
   const verdict = classifyIp(address);
   if (!verdict.blocked) return;
   if (!verdict.metadata) {
     const canon = canonicalIp(address);
-    if (canon !== null && policy.allowAddresses.some((a) => canonicalIp(a) === canon)) return;
+    if (canon !== null) {
+      for (const raw of policy.allowAddresses) {
+        const entry = parseAllowEntry(raw);
+        // An entry with a port matches only a connection to that port; a check without a port never matches it.
+        if (entry !== null && entry.address === canon && (entry.port === null || entry.port === port)) return;
+      }
+    }
   }
-  throw new BlockedRequestError(`Address ${address} is not allowed (${verdict.reason})`, verdict.reason);
+  const where = port === undefined ? address : `${address} port ${String(port)}`;
+  throw new BlockedRequestError(`Address ${where} is not allowed (${verdict.reason})`, verdict.reason);
+}
+
+/** One parsed allow-list entry: a canonical IP and an optional port (null means every port). */
+export interface AllowEntry {
+  readonly address: string;
+  readonly port: number | null;
+}
+
+/**
+ * Parse an allow-list entry: `10.0.0.5`, `10.0.0.5:8080`, `fd00::5`, `[fd00::5]` or `[fd00::5]:8080`.
+ * An IPv6 address with a port needs brackets. Returns null when the entry is not valid.
+ */
+export function parseAllowEntry(entry: string): AllowEntry | null {
+  if (typeof entry !== 'string' || entry.length === 0 || entry.length > 64) return null;
+  let host = entry;
+  let portText: string | null = null;
+  if (entry.startsWith('[')) {
+    const close = entry.indexOf(']');
+    if (close === -1) return null;
+    host = entry.slice(1, close);
+    const rest = entry.slice(close + 1);
+    if (rest !== '') {
+      if (!rest.startsWith(':')) return null;
+      portText = rest.slice(1);
+    }
+    if (!host.includes(':')) return null; // brackets are for IPv6 only
+  } else {
+    const colon = entry.indexOf(':');
+    // One colon: IPv4 with a port. More than one: a bare IPv6 address, which cannot carry a port.
+    if (colon !== -1 && entry.indexOf(':', colon + 1) === -1) {
+      host = entry.slice(0, colon);
+      portText = entry.slice(colon + 1);
+    }
+  }
+  const address = canonicalIp(host);
+  if (address === null) return null;
+  if (portText === null) return { address, port: null };
+  if (!/^[1-9][0-9]{0,4}$/.test(portText)) return null;
+  const port = Number(portText);
+  if (port > 65535) return null;
+  return { address, port };
+}
+
+/** The TCP port a URL connects to. */
+export function portOf(url: URL): number {
+  if (url.port !== '') return Number(url.port);
+  return url.protocol === 'https:' ? 443 : 80;
 }
 
 /**
@@ -114,8 +169,9 @@ export async function resolveAndCheck(input: string | URL, policy: NetworkPolicy
   const url = checkUrlSyntax(typeof input === 'string' ? input : input.href);
   const host = hostOf(url);
   const literal = parseIp(host);
+  const port = portOf(url);
   if (literal !== null) {
-    checkAddress(host, policy);
+    checkAddress(host, policy, port);
     return { url, address: { address: host, family: literal.family } };
   }
   let addresses: readonly ResolvedAddress[];
@@ -125,7 +181,7 @@ export async function resolveAndCheck(input: string | URL, policy: NetworkPolicy
     throw new BlockedRequestError(`Host ${host} did not resolve`, 'dns');
   }
   if (addresses.length === 0) throw new BlockedRequestError(`Host ${host} did not resolve`, 'dns');
-  for (const a of addresses) checkAddress(a.address, policy);
+  for (const a of addresses) checkAddress(a.address, policy, port);
   const first = addresses[0];
   if (first === undefined) throw new BlockedRequestError(`Host ${host} did not resolve`, 'dns');
   return { url, address: first };

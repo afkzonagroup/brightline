@@ -103,6 +103,14 @@ describe('guardedFetch', () => {
     expect(hits).toBe(before);
   });
 
+  it('an allow-list entry with a port opens only that port', async () => {
+    const res = await get('/', policy([`127.0.0.1:${String(port)}`]));
+    expect(res.status).toBe(200);
+    const before = hits;
+    expect(await reason(get('/', policy([`127.0.0.1:${String(port === 1 ? 2 : 1)}`])))).toBe('loopback');
+    expect(hits).toBe(before);
+  });
+
   it('refuses names resolving to private ranges', async () => {
     expect(
       await reason(guardedFetch({ url: 'http://rebind.test/', method: 'GET', headers: {} }, policy(), limits, new ByteBudget(1e6))),

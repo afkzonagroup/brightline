@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { readFile, stat } from 'node:fs/promises';
-import { canonicalIp } from '../net/ip.js';
-import { BlockedRequestError } from '../net/guard.js';
+import { BlockedRequestError, parseAllowEntry } from '../net/guard.js';
 import { JOURNEY_LIMITS, JourneyValidationError, parseJourney, type Journey } from '../journey/schema.js';
 import { atLeast, TOOL_VERSION, type ScanReport } from '../report/types.js';
 import { resolveOutputDir, writeReports } from '../report/write.js';
@@ -66,7 +65,7 @@ export async function main(argv: readonly string[], rawIo: CliIo): Promise<numbe
       return 0;
     }
     for (const a of cmd.allowAddresses) {
-      if (canonicalIp(a) === null) throw new UsageError(`--allow-address needs an IP address, got ${a.slice(0, 60)}`);
+      if (parseAllowEntry(a) === null) throw new UsageError(`--allow-address needs an IP address or address:port, got ${a.slice(0, 60)}`);
     }
     const journey = cmd.journeyFile === undefined ? undefined : await readJourneyFile(cmd.journeyFile);
     const outDir = resolveOutputDir(cmd.outDir);

@@ -99,7 +99,7 @@ brightline --help | --version
 | `--format <f>` | `both` | `json`, `html` or `both` |
 | `--detectors <list>` | all | Comma-separated detector ids |
 | `--ignore-robots` | off | Do not read robots.txt |
-| `--allow-address <ip>` | none | Allow one private IP address, for your own staging server. Repeatable. Cloud metadata addresses can never be allowed |
+| `--allow-address <ip>` | none | Allow one private IP address, for your own staging server. Add a port (`10.0.0.5:8080`, `[fd00::5]:8080`) to allow only that port. Repeatable, at most 20. Cloud metadata addresses can never be allowed |
 | `--fail-on <level>` | `none` | Exit with code 1 if a finding is at least `high`, `medium` or `low` |
 | `--no-sandbox` | off | Run Chromium without its OS sandbox. Only inside a container. Also set by the environment variable `BRIGHTLINE_NO_SANDBOX=1`. If the sandbox cannot start, Brightline stops with an explanation instead of turning it off |
 | `--quiet` | off | Print only the summary line |
@@ -194,7 +194,7 @@ docker run --rm --cap-drop=ALL --security-opt no-new-privileges --read-only --tm
 
 The image runs as the unprivileged `node` user, contains production dependencies and Chromium's headless shell only, and sets `BRIGHTLINE_NO_SANDBOX=1` because Chromium's own sandbox needs privileges that a default container does not grant. The container is the isolation boundary: drop all capabilities, forbid privilege escalation and keep the root file system read-only as above (tested with these flags); never add `--privileged`. Mount only the output directory, writable by user id 1000.
 
-To scan a server running on the Docker host, map a name to the host gateway and allow its addresses explicitly, for example `--add-host shop.test:host-gateway` and `--allow-address <gateway IPv4> --allow-address <gateway IPv6>`. Brightline refuses private addresses unless you allow them.
+To scan a server running on the Docker host, map a name to the host gateway and allow its addresses explicitly, for example `--add-host shop.test:host-gateway` and `--allow-address <gateway IPv4>:<port> --allow-address [<gateway IPv6>]:<port>`. Brightline refuses private addresses unless you allow them.
 
 ## Configuration reference
 
@@ -211,7 +211,7 @@ All `scan()` options (CLI flags in brackets):
 | `maxTotalBytes` | 200 MiB | 1 MiB to 2 GiB, counts responses and request bodies |
 | `maxRedirects` | 5 | 0 to 20 |
 | `respectRobotsTxt` [`--ignore-robots`] | true | |
-| `allowAddresses` [`--allow-address`] | none | exact IPs |
+| `allowAddresses` [`--allow-address`] | none | exact IPs, optionally with a port |
 | `detectors` [`--detectors`] | all | detector ids |
 | `outputDir` [`--out`] | none (no screenshots) | directory |
 | `chromiumSandbox` [`--no-sandbox`] | true | |

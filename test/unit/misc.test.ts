@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CLAIM_PATTERNS, CONFIRMSHAMING_PHRASES, PRIOR_PRICE_PHRASES } from '../../src/data/phrases.js';
 import { GENERIC_LABELS, OFFICIAL_ORDER_BUTTON_LABELS, PAYMENT_WORDS } from '../../src/legal/order-button-labels.js';
 import { PROVISIONS, getProvision } from '../../src/legal/provisions.js';
-import { amountsIn, crawlKey, isCrawlable, launchErrorMessage, normaliseLimits } from '../../src/scan.js';
+import { amountsIn, crawlKey, isCrawlable, launchErrorMessage, normaliseLimits, scan } from '../../src/scan.js';
 import { colorDistance, contrastRatio, over, parseColor } from '../../src/util/color.js';
 import { ensureSubdir, isSafeFileName, safeWriteFile } from '../../src/util/files.js';
 import { clip, equalsPhrase, findPhrase, findPrefix, normalizeText } from '../../src/util/text.js';
@@ -152,5 +152,18 @@ describe('amounts shown at a journey mark', () => {
   it('reads amounts from short text blocks only', () => {
     expect(amountsIn({ textBlocks: [{ selector: 'p', text: 'Delivery: €4.99, added at checkout' }, { selector: 'p', text: 'No price here' }, { selector: 'p', text: `€9.99 ${'x'.repeat(200)}` }] })).toEqual([4.99]);
     expect(amountsIn({ textBlocks: Array.from({ length: 300 }, () => ({ selector: 'p', text: '€1.00' })) })).toHaveLength(200);
+  });
+});
+
+describe('scan option checks', () => {
+  it('refuses invalid allow-list entries before any network or browser work', async () => {
+    let resolved = 0;
+    const resolver = (): Promise<never> => {
+      resolved += 1;
+      return Promise.reject(new Error('ENOTFOUND'));
+    };
+    await expect(scan({ url: 'https://a.example', allowAddresses: ['10.0.0.5:99999'], resolver })).rejects.toThrow(/allowAddresses/);
+    await expect(scan({ url: 'https://a.example', allowAddresses: Array.from({ length: 21 }, (_, i) => `10.0.0.${String(i)}`), resolver })).rejects.toThrow(/at most 20/);
+    expect(resolved).toBe(0);
   });
 });
